@@ -1,1 +1,1 @@
-# comparison-of-compression-algorithms
+# Compression Algorithm Comparison ( CAC )
