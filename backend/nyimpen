@@ -1,30 +1,87 @@
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'files[]' not in request.files:
-        resp = jsonify({
-            "message": "No file part in the request",
-            "status": "failed"
-        })
-        resp.status_code = 400
-        return resp
+import numpy as np
+from pydub import AudioSegment
 
-    files = request.files.getlist('files[]')
-    uploaded_files = []
+def read_audio(input_mp3_file):
+    audio = AudioSegment.from_mp3(input_mp3_file)
+    audio = audio.set_channels(1)  # Convert to mono
+    samples = np.array(audio.get_array_of_samples(), dtype=np.int16)
+    return samples, audio.frame_rate, audio.sample_width, audio.channels
 
-    for file in files:
-        if file.filename == '':
-            continue
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            uploaded_files.append(filename)
+def write_audio(output_mp3_file, audio, frame_rate, sample_width, channels):
+    audio_segment = AudioSegment(
+        audio.tobytes(),
+        frame_rate=frame_rate,
+        sample_width=sample_width,
+        channels=channels
+    )
+    audio_segment.export(output_mp3_file, format="mp3")
 
-    if len(uploaded_files) == 0:
-        resp = jsonify({
-            "message": "No valid files uploaded",
-            "status": "failed"
-        })
-        resp.status_code = 400
-        return resp
+def dwt(signal, level=2):
+    coeffs = []
+    approx = signal.copy()
+    for _ in range(level):
+        length = len(approx)
+        if length % 2 != 0:
+            approx = np.append(approx, 0)
+        half_length = length // 2
+        detail = approx[half_length:]
+        approx = approx[:half_length]
+        coeffs.append(detail)
+    coeffs.append(approx)
+    return coeffs
 
-    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], uploaded_files[0]), as_attachment=True)
+def idwt(coeffs):
+    approx = coeffs[-1]
+    for detail in reversed(coeffs[:-1]):
+        approx = np.concatenate((approx, detail))
+    return approx
+
+def quantize(coeffs, quantization_factor=10):
+    return [np.round(coeff / quantization_factor).astype(int) for coeff in coeffs]
+
+def dequantize(quantized_coeffs, quantization_factor=10):
+    return [coeff * quantization_factor for coeff in quantized_coeffs]
+
+def compress_audio(input_mp3_file, output_encoded_file, level=2):
+    audio, frame_rate, sample_width, channels = read_audio(input_mp3_file)
+    coeffs = dwt(audio, level)
+    quantized_coeffs = quantize(coeffs)
+
+    encoded_audio = []
+    for coeff in quantized_coeffs:
+        encoded_audio.extend(coeff)
+
+    encoded_audio_str = ','.join(map(str, encoded_audio))
+
+    with open(output_encoded_file, 'w') as f:
+        f.write(encoded_audio_str)
+
+    return frame_rate, sample_width, channels
+
+def decompress_audio(encoded_file, output_mp3_file, frame_rate, sample_width, channels, level=2):
+    with open(encoded_file, 'r') as f:
+        encoded_audio_str = f.read()
+
+    encoded_audio = list(map(int, encoded_audio_str.split(',')))
+
+    coeffs = []
+    idx = 0
+    for i in range(level):
+        length = len(encoded_audio) // (2 ** (level - i))
+        coeffs.append(np.array(encoded_audio[idx:idx + length // 2]))
+        idx += length // 2
+    coeffs.append(np.array(encoded_audio[idx:]))
+
+    dequantized_coeffs = dequantize(coeffs)
+    audio_reconstructed = idwt(dequantized_coeffs)
+    write_audio(output_mp3_file, audio_reconstructed.astype(np.int16), frame_rate, sample_width, channels)
+
+# Example usage
+input_mp3_file = 'audio_try.mp3'  # Replace with your MP3 file path
+output_encoded_file = 'encoded_audio.txt'
+output_mp3_file = 'decompressed_audio.mp3'
+
+frame_rate, sample_width, channels = compress_audio(input_mp3_file, output_encoded_file)
+decompress_audio(output_encoded_file, output_mp3_file, frame_rate, sample_width, channels)
+
+print(f'Compressed and decompressed audio saved at: {output_mp3_file}')

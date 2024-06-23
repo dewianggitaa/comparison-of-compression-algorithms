@@ -245,6 +245,7 @@ def compress_audio(input_audio_file, output_audio_file, compression_ratio, outpu
 
 
 @app.route('/compress-audio', methods=['POST'])
+# ------------------- DCT ALGORITHM
 def compress_audio_dct():
     if 'files[]' not in request.files:
         return jsonify({"error": "No files part"}), 400
@@ -263,8 +264,8 @@ def compress_audio_dct():
 
             compression_ratio = 0.2
             bitrate = "32k"
-            output_name = 'dct_compressed_' + filename
-            output_path = AFTER_AUDIO_DCT
+            output_name = filename
+            output_path = os.path.join(app.config['AFTER_AUDIO_DCT'], output_name)
             format = "mp3"
 
             compress_audio(temp_path, output_path, compression_ratio, output_format = "mp3", bitrate=bitrate)
@@ -276,6 +277,10 @@ def compress_audio_dct():
             })
 
     return jsonify({"error": "No valid files processed"}), 400
+
+
+# ------------- DWT ALGORITHM ----------------
+
 
 if __name__ == '__main__':
     app.run(debug=True)
