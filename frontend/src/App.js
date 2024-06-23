@@ -1,6 +1,6 @@
 import './App.css';
 import {BrowserRouter, Routes, Route} from "react-router-dom"
-import { LandingPage, CompressAudio, CompressImage } from './component';
+import { LandingPage, CompressAudio, CompressImage, CompressVideo } from './component';
 
 function App() {
   return (
@@ -10,6 +10,7 @@ function App() {
           <Route path="/" element={<LandingPage/>}/>
           <Route path="/compress-audio" element={<CompressAudio/>}/>
           <Route path="/compress-image" element={<CompressImage/>}/>
+          <Route path="/compress-video" element={<CompressVideo/>}/>
         </Routes>
       </BrowserRouter>
     </>
